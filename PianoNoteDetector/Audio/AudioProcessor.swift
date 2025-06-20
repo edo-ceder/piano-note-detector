@@ -29,10 +29,14 @@ class AudioProcessor: NSObject, SCStreamOutput {
     
     // This delegate method is called by ScreenCaptureKit with audio buffers.
     func stream(_ stream: SCStream, didOutputSampleBuffer sampleBuffer: CMSampleBuffer, of type: SCStreamOutputType) {
-        guard type == .audio else { return }
+        guard type == .audio else { 
+            print("🎬 AudioProcessor received non-audio buffer (type: \(type))")
+            return 
+        }
 
         // Let's confirm we're getting here.
         print("🎤 AudioProcessor received a sample buffer.")
+        NSLog("🎤 PianoNoteDetector: AudioProcessor received an audio sample buffer")
         
         // Update sample rate from buffer description if needed
         if let formatDescription = CMSampleBufferGetFormatDescription(sampleBuffer) {

@@ -198,7 +198,8 @@ class AudioCaptureManager: NSObject, ObservableObject {
                 print("3/5: Creating content filter...")
                 
                 // Create a filter that captures the entire display INCLUDING audio from all applications
-                let filter = SCContentFilter(display: display, including: content.applications, exceptingWindows: [])
+                // Simplified filter - just capture everything from the display
+                let filter = SCContentFilter(display: display, excludingWindows: [])
                 
                 NSLog("4/5 PianoNoteDetector: Creating stream configuration...")
                 print("4/5: Creating stream configuration...")
@@ -218,7 +219,7 @@ class AudioCaptureManager: NSObject, ObservableObject {
                 print("4.5: Stream config - capturesAudio: \(config.capturesAudio), sampleRate: \(config.sampleRate), channels: \(config.channelCount)")
                 print("4/5: Created stream configuration.")
 
-                stream = SCStream(filter: filter, configuration: config, delegate: nil)  // Changed delegate to nil
+                stream = SCStream(filter: filter, configuration: config, delegate: self)  // Changed delegate back to self
                 print("4.1: Created SCStream instance")
                 
                 if let noteDetector = self.noteDetector {
