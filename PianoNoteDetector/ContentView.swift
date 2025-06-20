@@ -45,6 +45,19 @@ struct ContentView: View {
             
             Divider()
             
+            // Pitch Visualization
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Pitch Visualization")
+                    .font(.headline)
+                
+                PitchVisualizationView(noteDetector: noteDetector)
+                    .frame(height: 150)
+                    .background(Color.black.opacity(0.1))
+                    .cornerRadius(10)
+            }
+            
+            Divider()
+            
             // Audio Level Meter
             VStack(alignment: .leading, spacing: 10) {
                 Text("Audio Level")
@@ -133,7 +146,7 @@ struct ContentView: View {
             Spacer()
         }
         .padding()
-        .frame(width: 500, height: 600)
+        .frame(width: 500, height: 700) // Increased height to accommodate pitch visualization
         .onChange(of: audioCapture.hasPermission) { _, newValue in
             if newValue {
                 permissionCheckCount = 0
@@ -238,6 +251,135 @@ struct PermissionStatusView: View {
             .background(Color.orange.opacity(0.1))
             .cornerRadius(8)
         }
+    }
+}
+
+struct PitchVisualizationView: View {
+    @ObservedObject var noteDetector: NoteDetector
+    
+    // Piano frequency range: A0 (27.5 Hz) to C8 (4186 Hz)
+    // For visualization, we'll use a more practical range
+    private let minFreq: Double = 80.0    // Low piano range
+    private let maxFreq: Double = 2000.0  // High piano range
+    
+    var body: some View {
+        GeometryReader { geometry in
+            ZStack {
+                // Background with piano key reference lines
+                BackgroundGridView(geometry: geometry)
+                
+                // Main pitch line
+                if let primaryNote = noteDetector.primaryNote {
+                    PitchLineView(
+                        frequency: primaryNote.frequency,
+                        color: primaryNote.color,
+                        geometry: geometry,
+                        minFreq: minFreq,
+                        maxFreq: maxFreq,
+                        opacity: 1.0
+                    )
+                    .animation(.easeInOut(duration: 0.2), value: primaryNote.frequency)
+                }
+                
+                // Secondary pitch lines (fainter)
+                ForEach(Array(noteDetector.secondaryNotes.enumerated()), id: \.element.name) { index, note in
+                    PitchLineView(
+                        frequency: note.frequency,
+                        color: note.color,
+                        geometry: geometry,
+                        minFreq: minFreq,
+                        maxFreq: maxFreq,
+                        opacity: 0.4
+                    )
+                    .animation(.easeInOut(duration: 0.2), value: note.frequency)
+                }
+                
+                // Frequency labels
+                FrequencyLabelsView(geometry: geometry, minFreq: minFreq, maxFreq: maxFreq)
+            }
+        }
+    }
+}
+
+struct BackgroundGridView: View {
+    let geometry: GeometryProxy
+    
+    var body: some View {
+        // Horizontal reference lines for major octaves
+        ForEach([100, 200, 400, 800, 1600], id: \.self) { freq in
+            let normalizedPosition = log(Double(freq) / 80.0) / log(2000.0 / 80.0)
+            let yPosition = geometry.size.height * (1.0 - normalizedPosition)
+            
+            Rectangle()
+                .fill(Color.gray.opacity(0.2))
+                .frame(height: 1)
+                .offset(y: yPosition - geometry.size.height / 2)
+        }
+    }
+}
+
+struct PitchLineView: View {
+    let frequency: Double
+    let color: Color
+    let geometry: GeometryProxy
+    let minFreq: Double
+    let maxFreq: Double
+    let opacity: Double
+    
+    var body: some View {
+        let normalizedPosition = normalizedFrequencyPosition(frequency)
+        let yPosition = geometry.size.height * (1.0 - normalizedPosition)
+        
+        Rectangle()
+            .fill(color.opacity(opacity))
+            .frame(height: 3)
+            .shadow(color: color.opacity(0.5), radius: 2)
+            .offset(y: yPosition - geometry.size.height / 2)
+            .overlay(
+                // Frequency label on the line
+                HStack {
+                    Spacer()
+                    Text("\(Int(frequency)) Hz")
+                        .font(.caption2)
+                        .foregroundColor(color)
+                        .background(Color.white.opacity(0.8))
+                        .cornerRadius(4)
+                        .padding(.trailing, 8)
+                }
+                .offset(y: yPosition - geometry.size.height / 2)
+            )
+    }
+    
+    private func normalizedFrequencyPosition(_ freq: Double) -> Double {
+        // Use logarithmic scale for frequency to match human pitch perception
+        let clampedFreq = max(minFreq, min(maxFreq, freq))
+        return log(clampedFreq / minFreq) / log(maxFreq / minFreq)
+    }
+}
+
+struct FrequencyLabelsView: View {
+    let geometry: GeometryProxy
+    let minFreq: Double
+    let maxFreq: Double
+    
+    var body: some View {
+        VStack {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    ForEach([("2000 Hz", 2000.0), ("800 Hz", 800.0), ("400 Hz", 400.0), ("200 Hz", 200.0), ("100 Hz", 100.0)], id: \.0) { label, freq in
+                        let normalizedPosition = log(freq / minFreq) / log(maxFreq / minFreq)
+                        let yOffset = geometry.size.height * (1.0 - normalizedPosition)
+                        
+                        Text(label)
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                            .offset(y: yOffset - geometry.size.height / 2)
+                    }
+                }
+                Spacer()
+            }
+        }
+        .padding(.leading, 8)
     }
 }
 
