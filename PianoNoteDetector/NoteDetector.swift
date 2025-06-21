@@ -10,6 +10,12 @@ struct DetectedNote {
     let color: Color
 }
 
+struct FrequencyPeak {
+    let frequency: Double
+    let magnitude: Float
+    let binIndex: Int
+}
+
 @MainActor
 class NoteDetector: ObservableObject {
     @Published var primaryNote: DetectedNote?
@@ -21,6 +27,29 @@ class NoteDetector: ObservableObject {
     @Published var sampleCount: Int = 0
     @Published var spectrumData: [Float] = []
     @Published var dominantFrequency: Double = 0.0
+    
+    // Raw frequency analysis data for debugging (smoothed to reduce flickering)
+    @Published var rawPeaks: [FrequencyPeak] = []
+    @Published var currentThreshold: Float = 0.0
+    @Published var noiseFloor: Float = 0.0
+    @Published var maxMagnitude: Float = 0.0
+    @Published var totalMagnitude: Float = 0.0
+    @Published var peakCount: Int = 0
+    
+    // Raw audio waveform data for visualization
+    @Published var rawAudioWaveform: [Float] = []
+    @Published var spectrumDisplay: [Float] = []
+    
+    // Smoothing properties to reduce flickering
+    private var smoothedThreshold: Float = 0.0
+    private var smoothedNoiseFloor: Float = 0.0
+    private var smoothedMaxMagnitude: Float = 0.0
+    private var smoothedTotalMagnitude: Float = 0.0
+    private var smoothedDominantFrequency: Double = 0.0
+    
+    private var updateCounter: Int = 0
+    private let smoothingFactor: Float = 0.05 // Extremely aggressive smoothing (5% new data)
+    private let uiUpdateInterval: Int = 10 // Update UI every 10 analysis cycles (much less frequent)
     
     private var noteHistory: [DetectedNote] = []
     private let maxHistorySize = 10
@@ -112,7 +141,60 @@ class NoteDetector: ObservableObject {
         self.audioLevel = level
         self.sampleCount = sampleCount
         self.spectrumData = spectrum
-        self.dominantFrequency = dominantFreq
+        
+        // Apply smoothing to dominant frequency to reduce flickering
+        smoothedDominantFrequency = smoothedDominantFrequency * Double(1.0 - smoothingFactor) + dominantFreq * Double(smoothingFactor)
+        self.dominantFrequency = smoothedDominantFrequency
+        
         print("📊 Audio visualization updated - Level: \(level), Samples: \(sampleCount), Peak: \(dominantFreq)Hz")
+    }
+    
+    // Update raw frequency analysis data for debugging (with smoothing)
+    func updateFrequencyAnalysis(peaks: [FrequencyPeak], threshold: Float, noiseFloor: Float, maxMag: Float, totalMag: Float) {
+        updateCounter += 1
+        
+        // Apply smoothing to reduce flickering
+        smoothedThreshold = smoothedThreshold * (1.0 - smoothingFactor) + threshold * smoothingFactor
+        smoothedNoiseFloor = smoothedNoiseFloor * (1.0 - smoothingFactor) + noiseFloor * smoothingFactor  
+        smoothedMaxMagnitude = smoothedMaxMagnitude * (1.0 - smoothingFactor) + maxMag * smoothingFactor
+        smoothedTotalMagnitude = smoothedTotalMagnitude * (1.0 - smoothingFactor) + totalMag * smoothingFactor
+        
+        // Only update UI every few cycles to reduce flickering
+        if updateCounter % uiUpdateInterval == 0 {
+            self.rawPeaks = peaks
+            self.currentThreshold = smoothedThreshold
+            self.noiseFloor = smoothedNoiseFloor
+            self.maxMagnitude = smoothedMaxMagnitude
+            self.totalMagnitude = smoothedTotalMagnitude
+            self.peakCount = peaks.count
+        }
+        
+        print("🔍 Raw frequency analysis updated - \(peaks.count) peaks, threshold: \(threshold), noise floor: \(noiseFloor)")
+    }
+    
+    // Update raw audio waveform for visualization
+    func updateRawAudioWaveform(_ samples: [Float]) {
+        // Keep only the most recent samples for visualization (e.g., last 1024 samples)
+        let maxSamples = 1024
+        if samples.count > maxSamples {
+            self.rawAudioWaveform = Array(samples.suffix(maxSamples))
+        } else {
+            self.rawAudioWaveform = samples
+        }
+    }
+    
+    // Update spectrum display data
+    func updateSpectrumDisplay(_ spectrum: [Float]) {
+        // Keep a reasonable number of frequency bins for display
+        let maxBins = 256
+        if spectrum.count > maxBins {
+            self.spectrumDisplay = Array(spectrum.prefix(maxBins))
+        } else {
+            self.spectrumDisplay = spectrum
+        }
+        
+        // Debug: Check if spectrum data is actually being received
+        let maxSpec = spectrum.max() ?? 0.0
+        print("🌊 Spectrum updated: \(spectrum.count) bins, max: \(maxSpec), first 5: \(Array(spectrum.prefix(5)))")
     }
 } 
